@@ -109,6 +109,11 @@ input:focus,select:focus,textarea:focus{border-color:#9dbd1e;box-shadow:0 0 0 3p
 .field label{color:#45484a}
 .field input,.field select,.field textarea{border-color:#ddd;background:#fff}
 .form .btn{grid-column:1/-1}
+.form-note{grid-column:1/-1;font-size:12px;color:#666;margin:0}
+.field input[type=file]{padding:11px}
+.field small{display:block;color:#777;font-size:11px;margin-top:6px}
+.price-preview{grid-column:1/-1;background:#f3f7df;border:1px solid #dce8ae;border-radius:12px;padding:12px 14px;font-weight:800;color:#344500}
+
 footer{padding:34px 0;border-top:1px solid var(--line);color:#8c9299;font-size:12px}
 .footer-row{display:flex;justify-content:space-between;gap:20px;align-items:center}
 .footer-brand{color:#fff;font-weight:950;font-size:20px;letter-spacing:2px}
@@ -207,11 +212,22 @@ footer{padding:34px 0;border-top:1px solid var(--line);color:#8c9299;font-size:1
   <div class="order-copy"><div class="kicker">Let’s get started</div><h2>Your SA3Y story starts here.</h2><p>Fill in your details and send your package request. The team can confirm your school’s options, sizes, delivery details and final price.</p></div>
   <form class="form" id="orderForm">
    <div class="field"><label for="fullName">Full name</label><input id="fullName" required placeholder="Your name"></div>
-   <div class="field"><label for="phone">Phone number</label><input id="phone" required placeholder="+20 ..."></div>
+   <div class="field"><label for="phone">Phone number</label><input id="phone" required placeholder="+20 ..." inputmode="tel"></div>
    <div class="field"><label for="schoolField">School</label><input id="schoolField" placeholder="Your school"></div>
    <div class="field"><label for="selectedPackage">Package</label><select id="selectedPackage" required><option value="">Choose a package</option><option>Starter Pack</option><option>Premium Pack</option><option>VIP Pack</option><option>Custom Pack</option></select></div>
-   <div class="field full"><label for="orderNotes">Notes / custom selections</label><textarea id="orderNotes" rows="3" placeholder="Sizes, custom choices or questions..."></textarea></div>
-   <button class="btn" type="submit">SEND MY REQUEST ↗</button>
+
+   <p class="form-note"><strong>Clothing sizes</strong> — choose a size for each item included in your package. Leave items you are not ordering as “Not included”.</p>
+   <div class="field"><label for="hoodieSize">Hoodie size</label><select id="hoodieSize"><option value="">Not included</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+   <div class="field"><label for="tshirtSize">T-shirt size</label><select id="tshirtSize"><option value="">Not included</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+   <div class="field"><label for="jacketSize">Jacket size</label><select id="jacketSize"><option value="">Not included</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+   <div class="field"><label for="paymentMethod">Payment method</label><select id="paymentMethod" required><option value="InstaPay">InstaPay only</option></select></div>
+
+   <div class="price-preview" id="pricePreview">Package total: Choose a package</div>
+   <p class="form-note">After transferring through InstaPay using the payment details provided by SA3Y, enter the transaction reference number or attach a screenshot below. Your payment will remain Pending until the SA3Y team verifies it.</p>
+   <div class="field full"><label for="paymentReference">InstaPay transaction reference number</label><input id="paymentReference" placeholder="Enter the reference number (optional if screenshot is attached)"></div>
+   <div class="field full"><label for="paymentProof">Transfer screenshot</label><input id="paymentProof" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG or WEBP. Maximum size: 4 MB. Optional if you entered a reference number.</small></div>
+   <div class="field full"><label for="orderNotes">Notes / custom selections</label><textarea id="orderNotes" rows="3" placeholder="Custom choices, preferred quantities or questions..."></textarea></div>
+   <button class="btn" id="submitOrderButton" type="submit">SEND MY REQUEST ↗</button>
   </form>
  </div>
 </section>
@@ -261,16 +277,14 @@ function choosePackage(name){
 document.getElementById('schoolCode').addEventListener('keydown',e=>{if(e.key==='Enter')checkSchool()});
 const SA3Y_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxN2F1n85DExz3tf0x1UN6cz4nj3UzIzCA6jJWww_h1L-_Fcgg3xGmboNgCFNMxN_LOFQ/exec";
 
-document.getElementById('orderForm').addEventListener('submit',e=>{
- e.preventDefault();
- const custom=[...document.querySelectorAll('#custom input[type=checkbox]:checked')].map(x=>x.value);
- const notes=document.getElementById('orderNotes').value;
- const combined=[notes,custom.length?"Custom selections: "+custom.join(", "):"",document.getElementById('customNotes').value].filter(Boolean).join("\\n");
- const details={name:document.getElementById('fullName').value,phone:document.getElementById('phone').value,school:document.getElementById('schoolField').value,package:document.getElementById('selectedPackage').value,notes:combined};
- const packagePrices={"Starter Pack":"1700 EGP","Premium Pack":"1900 EGP","VIP Pack":"2600 EGP","Custom Pack":"حسب الاختيارات"};
- details.price=packagePrices[details.package]||"يتم التأكيد";
+const packagePrices={"Starter Pack":"1700 EGP","Premium Pack":"1900 EGP","VIP Pack":"2600 EGP","Custom Pack":"حسب الاختيارات"};
+function updatePricePreview(){
+ const selected=document.getElementById('selectedPackage').value;
+ document.getElementById('pricePreview').textContent="Package total: "+(packagePrices[selected]||"Choose a package");
+}
+document.getElementById('selectedPackage').addEventListener('change',updatePricePreview);
 
- // Submit as a normal HTML form so Apps Script receives e.parameter (POST).
+function submitToAppsScript(details){
  let frame=document.getElementById('sa3ySubmitFrame');
  if(!frame){
    frame=document.createElement('iframe');
@@ -286,15 +300,75 @@ document.getElementById('orderForm').addEventListener('submit',e=>{
  postForm.style.display='none';
  Object.entries(details).forEach(([key,value])=>{
    const input=document.createElement('input');
-   input.type='hidden'; input.name=key; input.value=value;
+   input.type='hidden'; input.name=key; input.value=value ?? '';
    postForm.appendChild(input);
  });
  document.body.appendChild(postForm);
  postForm.submit();
  postForm.remove();
+}
 
- document.getElementById('modalText').textContent=`Thanks, ${details.name}. Your ${details.package} request has been submitted to SA3Y. Listed package price: ${details.price}. Please allow a moment, then check with the SA3Y team to confirm that it appears in the order sheet.`;
- document.getElementById('modal').classList.add('show');
+document.getElementById('orderForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+
+ const paymentReference=document.getElementById('paymentReference').value.trim();
+ const proofFile=document.getElementById('paymentProof').files[0];
+ if(!paymentReference && !proofFile){
+   alert("Please enter the InstaPay transaction reference number or attach a transfer screenshot.");
+   return;
+ }
+ if(proofFile && proofFile.size>4*1024*1024){
+   alert("The screenshot must be 4 MB or smaller.");
+   return;
+ }
+ if(proofFile && !['image/png','image/jpeg','image/webp'].includes(proofFile.type)){
+   alert("Please upload a PNG, JPG or WEBP screenshot.");
+   return;
+ }
+
+ const button=document.getElementById('submitOrderButton');
+ button.disabled=true;
+ button.textContent="SENDING...";
+ try{
+   const custom=[...document.querySelectorAll('#custom input[type=checkbox]:checked')].map(x=>x.value);
+   const notes=document.getElementById('orderNotes').value;
+   const combined=[notes,custom.length?"Custom selections: "+custom.join(", "):"",document.getElementById('customNotes').value].filter(Boolean).join("\n");
+   const selectedPackage=document.getElementById('selectedPackage').value;
+   const details={
+     name:document.getElementById('fullName').value.trim(),
+     phone:document.getElementById('phone').value.trim(),
+     school:document.getElementById('schoolField').value.trim(),
+     package:selectedPackage,
+     notes:combined,
+     price:packagePrices[selectedPackage]||"يتم التأكيد",
+     paymentMethod:"InstaPay",
+     paymentReference,
+     hoodieSize:document.getElementById('hoodieSize').value,
+     tshirtSize:document.getElementById('tshirtSize').value,
+     jacketSize:document.getElementById('jacketSize').value,
+     proofData:""
+   };
+
+   if(proofFile){
+     details.proofData=await new Promise((resolve,reject)=>{
+       const reader=new FileReader();
+       reader.onload=()=>resolve(String(reader.result));
+       reader.onerror=()=>reject(new Error("Could not read the screenshot. Please try again."));
+       reader.readAsDataURL(proofFile);
+     });
+   }
+
+   submitToAppsScript(details);
+   document.getElementById('modalText').textContent=`Thanks, ${details.name}. Your ${details.package} request is being sent to SA3Y. Listed package price: ${details.price}. Payment status will remain Pending until the team verifies your InstaPay transfer.`;
+   document.getElementById('modal').classList.add('show');
+   document.getElementById('orderForm').reset();
+   updatePricePreview();
+ }catch(error){
+   alert(error.message||"Something went wrong. Please try again.");
+ }finally{
+   button.disabled=false;
+   button.textContent="SEND MY REQUEST ↗";
+ }
 });
 function closeModal(){document.getElementById('modal').classList.remove('show')}
 </script>
